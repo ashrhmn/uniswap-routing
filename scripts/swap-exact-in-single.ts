@@ -5,7 +5,7 @@ import {
   IWETH9__factory,
   Swap__factory,
 } from "../typechain-types";
-import { swapRouter, tokens } from "./tokens";
+import { swapRouter, tokens } from "./addresses";
 
 (async () => {
   const provider = ethers.provider;

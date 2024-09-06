@@ -10,7 +10,7 @@ import { parseEther } from "ethers/lib/utils";
 import { writeFile } from "fs/promises";
 import { ethers } from "hardhat";
 import { join } from "path";
-import { tokens } from "./tokens";
+import { tokens } from "./addresses";
 
 export class NativeToken extends NativeCurrency {
   constructor(
