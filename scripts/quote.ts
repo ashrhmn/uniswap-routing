@@ -1,7 +1,13 @@
 import { ethers } from "hardhat";
 import { IQuoterV2, IQuoterV2__factory } from "../typechain-types";
 import { quoterAddress, tokens } from "./addresses";
-import { formatEther, parseEther, solidityPack } from "ethers/lib/utils";
+import {
+  formatEther,
+  formatUnits,
+  parseEther,
+  parseUnits,
+  solidityPack,
+} from "ethers/lib/utils";
 
 (async () => {
   const quoter = IQuoterV2__factory.connect(quoterAddress, ethers.provider);
@@ -15,7 +21,7 @@ import { formatEther, parseEther, solidityPack } from "ethers/lib/utils";
   };
   const outAmountSingle = await quoter.callStatic
     .quoteExactInputSingle(params)
-    .then(({ amountOut }) => formatEther(amountOut));
+    .then(({ amountOut }) => formatUnits(amountOut, 6));
 
   console.log("Exact Input Single : ", outAmountSingle);
 
@@ -24,7 +30,7 @@ import { formatEther, parseEther, solidityPack } from "ethers/lib/utils";
     [tokens.ku, 10000, tokens.weth, 3000, tokens.link]
   );
   const outAmountMulti = await quoter.callStatic
-    .quoteExactInput(path, parseEther("1"))
+    .quoteExactInput(path, parseUnits("1", 6))
     .then(({ amountOut }) => formatEther(amountOut));
 
   console.log("Exact Input Multi : ", outAmountMulti);
