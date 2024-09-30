@@ -4,6 +4,8 @@ pragma abicoder v2;
 
 import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import "@uniswap/v3-periphery/contracts/interfaces/external/IWETH9.sol";
+import "hardhat/console.sol";
 
 contract Swap {
     ISwapRouter public immutable swapRouter;
@@ -43,9 +45,11 @@ contract Swap {
 
     // 10000 = 1%, 100000 = 10%, 1000000 = 100%
     uint256 public ownerFee = 100000; // 10%
+    address public wethAddress;
 
-    constructor(ISwapRouter _swapRouter) {
+    constructor(ISwapRouter _swapRouter, address _wethAddress) {
         swapRouter = _swapRouter;
+        wethAddress = _wethAddress;
         owner = msg.sender;
     }
 
@@ -62,13 +66,17 @@ contract Swap {
 
     function swapExactInputSingle(
         ExactInputSingleParams calldata args
-    ) external returns (uint256 amountOut) {
-        TransferHelper.safeTransferFrom(
-            args.tokenIn,
-            msg.sender,
-            address(this),
-            args.amountIn
-        );
+    ) external payable returns (uint256 amountOut) {
+        if (args.tokenIn == wethAddress) {
+            require(msg.value == args.amountIn, "IV");
+            IWETH9(wethAddress).deposit{value: args.amountIn}();
+        } else
+            TransferHelper.safeTransferFrom(
+                args.tokenIn,
+                msg.sender,
+                address(this),
+                args.amountIn
+            );
 
         TransferHelper.safeApprove(
             args.tokenIn,
@@ -90,12 +98,18 @@ contract Swap {
 
         amountOut = swapRouter.exactInputSingle(params);
         uint256 ownerAmount = (amountOut * ownerFee) / 1e6;
-        TransferHelper.safeTransfer(args.tokenOut, owner, ownerAmount);
-        TransferHelper.safeTransfer(
-            args.tokenOut,
-            msg.sender,
-            amountOut - ownerAmount
-        );
+        if (args.tokenOut == wethAddress) {
+            IWETH9(wethAddress).withdraw(amountOut);
+            TransferHelper.safeTransferETH(owner, ownerAmount);
+            TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount);
+        } else {
+            TransferHelper.safeTransfer(args.tokenOut, owner, ownerAmount);
+            TransferHelper.safeTransfer(
+                args.tokenOut,
+                msg.sender,
+                amountOut - ownerAmount
+            );
+        }
     }
 
     function swapExactOutputSingle(
@@ -223,4 +237,6 @@ contract Swap {
             );
         }
     }
+
+    receive() external payable {}
 }

@@ -7,4 +7,9 @@ import "@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.sol";
 
 contract Test20 is ERC20 {
     constructor() ERC20("", "") {}
+
+    function test() external view returns (uint256) {
+        uint256 t = totalSupply();
+        return t;
+    }
 }
