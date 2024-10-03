@@ -1,72 +1,41 @@
-import {
-  formatEther,
-  formatUnits,
-  parseEther,
-  parseUnits,
-} from "ethers/lib/utils";
+import { parseUnits } from "ethers/lib/utils";
 import { ethers } from "hardhat";
-import {
-  ERC20__factory,
-  IWETH9__factory,
-  Swap__factory,
-} from "../typechain-types";
+import { ERC20__factory, Swap__factory } from "../typechain-types";
 import { swapRouter, tokens } from "./addresses";
+import { debugBalance, getDeadline } from "./utils";
 
 (async () => {
-  const provider = ethers.provider;
   const [signer, owner] = await ethers.getSigners();
   const swap = await new Swap__factory(signer).deploy(swapRouter, tokens.weth);
   await swap.deployed();
   console.log(swap.address);
-  await swap.setOwner(owner.address).then((tx) => tx.wait());
-  const weth = IWETH9__factory.connect(tokens.weth, signer);
-  // await weth
-  //   .deposit({ value: ethers.utils.parseEther("100") })
-  //   .then((tx) => tx.wait());
+  // await swap.setOwner(owner.address).then((tx) => tx.wait());
 
-  const ku = ERC20__factory.connect(tokens.ku, signer);
-  const decimal = await ku.decimals();
+  const usdc = ERC20__factory.connect(tokens.usdc, signer);
+  const decimal = await usdc.decimals();
 
-  const debugBalance = async () => {
-    await ERC20__factory.connect(tokens.ku, provider)
-      .balanceOf(signer.address)
-      .then((v) => formatUnits(v, decimal))
-      .then(console.log);
-    await ERC20__factory.connect(tokens.ku, provider)
-      .balanceOf(owner.address)
-      .then((v) => formatUnits(v, decimal))
-      .then(console.log);
-    await ethers.provider
-      .getBalance(signer.address)
-      .then(formatEther)
-      .then(console.log);
-    await ethers.provider
-      .getBalance(owner.address)
-      .then(formatEther)
-      .then(console.log);
-  };
+  await debugBalance({ signer, owner, swap }, [tokens.usdc, tokens.frax]);
 
-  await debugBalance();
-
-  await ku
+  await usdc
     .approve(swap.address, ethers.constants.MaxUint256)
     .then((tx) => tx.wait());
   console.log("Approved");
-  const amountIn = parseUnits("8499", decimal);
+  const amountIn = parseUnits("1000", decimal);
 
-  const tx = await swap.swapExactInputSingle(
-    {
-      tokenIn: tokens.ku,
-      tokenOut: tokens.weth,
-      amountIn,
-      fee: 10000,
-      amountOutMinimum: 0,
-    },
-    { value: amountIn }
-  );
+  const tx = await swap.swapExactInputSingle({
+    tokenIn: tokens.usdc,
+    tokenOut: tokens.frax,
+    amountIn,
+    fee: 500,
+    amountOutMinimum: 0,
+    deadline: getDeadline(),
+    sqrtPriceLimitX96: 0,
+    owner: owner.address,
+    ownerFee: 10000,
+  });
   console.log(tx.hash);
   await tx.wait();
 
-  await debugBalance();
+  await debugBalance({ signer, owner, swap }, [tokens.usdc, tokens.frax]);
   process.exit(0);
 })();

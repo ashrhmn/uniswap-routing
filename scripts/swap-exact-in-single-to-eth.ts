@@ -14,30 +14,28 @@ import { debugBalance, getDeadline } from "./utils";
   const usdc = ERC20__factory.connect(tokens.usdc, signer);
   const decimal = await usdc.decimals();
 
-  await debugBalance({ signer, owner, swap }, [tokens.usdc, tokens.wbtc], true);
+  await debugBalance({ signer, owner, swap }, [tokens.usdc, tokens.weth], true);
 
   await usdc
     .approve(swap.address, ethers.constants.MaxUint256)
     .then((tx) => tx.wait());
   console.log("Approved");
+  const amountIn = parseUnits("500", decimal);
 
-  // const usdcBalance = await usdc.balanceOf(signer.address);
-  const amountInMaximum = parseUnits("10000", decimal);
-
-  const tx = await swap.swapExactOutputSingle({
+  const tx = await swap.swapExactInputSingle({
     tokenIn: tokens.usdc,
-    tokenOut: tokens.wbtc,
-    fee: 3000,
+    tokenOut: tokens.weth,
+    amountIn,
+    fee: 500,
+    amountOutMinimum: 0,
     deadline: getDeadline(),
     sqrtPriceLimitX96: 0,
-    amountOut: parseUnits("0.1", 8),
-    amountInMaximum,
     owner: owner.address,
     ownerFee: 10000,
   });
   console.log(tx.hash);
   await tx.wait();
 
-  await debugBalance({ signer, owner, swap }, [tokens.usdc, tokens.wbtc], true);
+  await debugBalance({ signer, owner, swap }, [tokens.usdc, tokens.weth], true);
   process.exit(0);
 })();

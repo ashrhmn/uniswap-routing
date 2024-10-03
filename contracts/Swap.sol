@@ -5,68 +5,83 @@ pragma abicoder v2;
 import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/external/IWETH9.sol";
-import "hardhat/console.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract Swap {
+contract Swap is Ownable, ReentrancyGuard {
     ISwapRouter public immutable swapRouter;
-    address public owner;
 
     struct ExactInputSingleParams {
-        uint256 amountIn;
         address tokenIn;
         address tokenOut;
+        uint256 amountIn;
         uint256 amountOutMinimum;
         uint24 fee;
+        uint160 sqrtPriceLimitX96;
+        uint256 deadline;
+        address owner;
+        uint256 ownerFee; // 10000 = 1%, 100000 = 10%, 1000000 = 100%
     }
 
     struct ExactOutputSingleParams {
-        uint256 amountOut;
-        uint256 amountInMaximum;
         address tokenIn;
         address tokenOut;
+        uint256 amountInMaximum;
+        uint256 amountOut;
         uint24 fee;
+        uint160 sqrtPriceLimitX96;
+        uint256 deadline;
+        address owner;
+        uint256 ownerFee; // 10000 = 1%, 100000 = 10%, 1000000 = 100%
     }
 
     struct ExactInputMultiParams {
-        uint256 amountIn;
         address tokenIn;
         address tokenOut;
+        uint256 amountIn;
         uint256 amountOutMinimum;
         bytes path;
+        uint256 deadline;
+        address owner;
+        uint256 ownerFee; // 10000 = 1%, 100000 = 10%, 1000000 = 100%
     }
 
     struct ExactOutputMultiParams {
-        uint256 amountOut;
-        uint256 amountInMaximum;
         address tokenIn;
         address tokenOut;
+        uint256 amountInMaximum;
+        uint256 amountOut;
         bytes path;
+        uint256 deadline;
+        address owner;
+        uint256 ownerFee; // 10000 = 1%, 100000 = 10%, 1000000 = 100%
     }
 
-    // 10000 = 1%, 100000 = 10%, 1000000 = 100%
-    uint256 public ownerFee = 100000; // 10%
-    address public wethAddress;
+    address public immutable wethAddress;
 
     constructor(ISwapRouter _swapRouter, address _wethAddress) {
         swapRouter = _swapRouter;
         wethAddress = _wethAddress;
-        owner = msg.sender;
     }
 
-    function setOwner(address _owner) external {
-        require(msg.sender == owner, "UA");
-        require(_owner != address(0), "ZA");
-        owner = _owner;
+    function sweepToken(address tokenAddress, address reciepient) internal {
+        uint256 balance = IERC20(tokenAddress).balanceOf(address(this));
+        if (balance > 0) {
+            TransferHelper.safeTransfer(tokenAddress, reciepient, balance);
+        }
     }
 
-    function setOwnerFee(uint256 _ownerFee) external {
-        require(msg.sender == owner, "UA");
-        ownerFee = _ownerFee;
+    function sweepNative(address recipient) internal {
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            TransferHelper.safeTransferETH(recipient, balance);
+        }
     }
 
     function swapExactInputSingle(
         ExactInputSingleParams calldata args
-    ) external payable returns (uint256 amountOut) {
+    ) external payable nonReentrant returns (uint256 amountOut) {
         if (args.tokenIn == wethAddress) {
             require(msg.value == args.amountIn, "IV");
             IWETH9(wethAddress).deposit{value: args.amountIn}();
@@ -90,37 +105,45 @@ contract Swap {
                 tokenOut: args.tokenOut,
                 fee: args.fee,
                 recipient: address(this),
-                deadline: block.timestamp,
+                deadline: args.deadline,
                 amountIn: args.amountIn,
                 amountOutMinimum: args.amountOutMinimum,
-                sqrtPriceLimitX96: 0
+                sqrtPriceLimitX96: args.sqrtPriceLimitX96
             });
 
         amountOut = swapRouter.exactInputSingle(params);
-        uint256 ownerAmount = (amountOut * ownerFee) / 1e6;
+        uint256 ownerAmount = (amountOut * args.ownerFee) / 1e6;
         if (args.tokenOut == wethAddress) {
             IWETH9(wethAddress).withdraw(amountOut);
-            TransferHelper.safeTransferETH(owner, ownerAmount);
+            TransferHelper.safeTransferETH(args.owner, ownerAmount);
             TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount);
         } else {
-            TransferHelper.safeTransfer(args.tokenOut, owner, ownerAmount);
+            TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
             TransferHelper.safeTransfer(
                 args.tokenOut,
                 msg.sender,
                 amountOut - ownerAmount
             );
         }
+
+        sweepToken(args.tokenIn, msg.sender);
+        sweepToken(args.tokenOut, msg.sender);
+        sweepNative(msg.sender);
     }
 
     function swapExactOutputSingle(
         ExactOutputSingleParams calldata args
-    ) external returns (uint256 amountIn) {
-        TransferHelper.safeTransferFrom(
-            args.tokenIn,
-            msg.sender,
-            address(this),
-            args.amountInMaximum
-        );
+    ) external payable nonReentrant returns (uint256 amountIn) {
+        if (args.tokenIn == wethAddress) {
+            require(msg.value == args.amountInMaximum, "IV");
+            IWETH9(wethAddress).deposit{value: args.amountInMaximum}();
+        } else
+            TransferHelper.safeTransferFrom(
+                args.tokenIn,
+                msg.sender,
+                address(this),
+                args.amountInMaximum
+            );
 
         TransferHelper.safeApprove(
             args.tokenIn,
@@ -134,40 +157,68 @@ contract Swap {
                 tokenOut: args.tokenOut,
                 fee: args.fee,
                 recipient: address(this),
-                deadline: block.timestamp,
+                deadline: args.deadline,
                 amountOut: args.amountOut,
                 amountInMaximum: args.amountInMaximum,
-                sqrtPriceLimitX96: 0
+                sqrtPriceLimitX96: args.sqrtPriceLimitX96
             });
 
         amountIn = swapRouter.exactOutputSingle(params);
 
-        uint256 ownerAmount = (args.amountOut * ownerFee) / 1e6;
-        TransferHelper.safeTransfer(args.tokenOut, owner, ownerAmount);
-        TransferHelper.safeTransfer(
-            args.tokenOut,
-            msg.sender,
-            args.amountOut - ownerAmount
-        );
-        if (amountIn < args.amountInMaximum) {
-            TransferHelper.safeApprove(args.tokenIn, address(swapRouter), 0);
-            TransferHelper.safeTransfer(
-                args.tokenIn,
+        uint256 ownerAmount = (args.amountOut * args.ownerFee) / 1e6;
+        if (args.tokenOut == wethAddress) {
+            IWETH9(wethAddress).withdraw(args.amountOut);
+            TransferHelper.safeTransferETH(args.owner, ownerAmount);
+            TransferHelper.safeTransferETH(
                 msg.sender,
-                args.amountInMaximum - amountIn
+                args.amountOut - ownerAmount
+            );
+        } else {
+            TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
+            TransferHelper.safeTransfer(
+                args.tokenOut,
+                msg.sender,
+                args.amountOut - ownerAmount
             );
         }
+
+        if (amountIn < args.amountInMaximum) {
+            uint256 returnAmount = args.amountInMaximum - amountIn;
+            if (args.tokenIn == wethAddress) {
+                IWETH9(wethAddress).withdraw(returnAmount);
+                TransferHelper.safeTransferETH(msg.sender, returnAmount);
+            } else {
+                TransferHelper.safeApprove(
+                    args.tokenIn,
+                    address(swapRouter),
+                    0
+                );
+                TransferHelper.safeTransfer(
+                    args.tokenIn,
+                    msg.sender,
+                    returnAmount
+                );
+            }
+        }
+
+        sweepToken(args.tokenIn, msg.sender);
+        sweepToken(args.tokenOut, msg.sender);
+        sweepNative(msg.sender);
     }
 
     function swapExactInputMultihop(
         ExactInputMultiParams calldata args
-    ) external returns (uint256 amountOut) {
-        TransferHelper.safeTransferFrom(
-            args.tokenIn,
-            msg.sender,
-            address(this),
-            args.amountIn
-        );
+    ) external payable nonReentrant returns (uint256 amountOut) {
+        if (args.tokenIn == wethAddress) {
+            require(msg.value == args.amountIn, "IV");
+            IWETH9(wethAddress).deposit{value: args.amountIn}();
+        } else
+            TransferHelper.safeTransferFrom(
+                args.tokenIn,
+                msg.sender,
+                address(this),
+                args.amountIn
+            );
 
         TransferHelper.safeApprove(
             args.tokenIn,
@@ -179,30 +230,43 @@ contract Swap {
             .ExactInputParams({
                 path: args.path,
                 recipient: address(this),
-                deadline: block.timestamp + 20000,
+                deadline: args.deadline,
                 amountIn: args.amountIn,
                 amountOutMinimum: args.amountOutMinimum
             });
 
         amountOut = swapRouter.exactInput(params);
-        uint256 ownerAmount = (amountOut * ownerFee) / 1e6;
-        TransferHelper.safeTransfer(args.tokenOut, owner, ownerAmount);
-        TransferHelper.safeTransfer(
-            args.tokenOut,
-            msg.sender,
-            amountOut - ownerAmount
-        );
+        uint256 ownerAmount = (amountOut * args.ownerFee) / 1e6;
+        if (args.tokenOut == wethAddress) {
+            IWETH9(wethAddress).withdraw(amountOut);
+            TransferHelper.safeTransferETH(args.owner, ownerAmount);
+            TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount);
+        } else {
+            TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
+            TransferHelper.safeTransfer(
+                args.tokenOut,
+                msg.sender,
+                amountOut - ownerAmount
+            );
+        }
+        sweepToken(args.tokenIn, msg.sender);
+        sweepToken(args.tokenOut, msg.sender);
+        sweepNative(msg.sender);
     }
 
     function swapExactOutputMultihop(
         ExactOutputMultiParams calldata args
-    ) external returns (uint256 amountIn) {
-        TransferHelper.safeTransferFrom(
-            args.tokenIn,
-            msg.sender,
-            address(this),
-            args.amountInMaximum
-        );
+    ) external payable nonReentrant returns (uint256 amountIn) {
+        if (args.tokenIn == wethAddress) {
+            require(msg.value == args.amountInMaximum, "IV");
+            IWETH9(wethAddress).deposit{value: args.amountInMaximum}();
+        } else
+            TransferHelper.safeTransferFrom(
+                args.tokenIn,
+                msg.sender,
+                address(this),
+                args.amountInMaximum
+            );
         TransferHelper.safeApprove(
             args.tokenIn,
             address(swapRouter),
@@ -212,30 +276,61 @@ contract Swap {
         ISwapRouter.ExactOutputParams memory params = ISwapRouter
             .ExactOutputParams({
                 path: args.path,
-                recipient: msg.sender,
-                deadline: block.timestamp,
+                recipient: address(this),
+                deadline: args.deadline,
                 amountOut: args.amountOut,
                 amountInMaximum: args.amountInMaximum
             });
 
         amountIn = swapRouter.exactOutput(params);
 
-        uint256 ownerAmount = (args.amountOut * ownerFee) / 1e6;
-        TransferHelper.safeTransfer(args.tokenOut, owner, ownerAmount);
-        TransferHelper.safeTransfer(
-            args.tokenOut,
-            msg.sender,
-            args.amountOut - ownerAmount
-        );
-        if (amountIn < args.amountInMaximum) {
-            TransferHelper.safeApprove(args.tokenIn, address(swapRouter), 0);
-            TransferHelper.safeTransferFrom(
-                args.tokenIn,
-                address(this),
+        uint256 ownerAmount = (args.amountOut * args.ownerFee) / 1e6;
+        if (args.tokenOut == wethAddress) {
+            IWETH9(wethAddress).withdraw(args.amountOut);
+            TransferHelper.safeTransferETH(args.owner, ownerAmount);
+            TransferHelper.safeTransferETH(
                 msg.sender,
-                args.amountInMaximum - amountIn
+                args.amountOut - ownerAmount
+            );
+        } else {
+            TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
+            TransferHelper.safeTransfer(
+                args.tokenOut,
+                msg.sender,
+                args.amountOut - ownerAmount
             );
         }
+        if (amountIn < args.amountInMaximum) {
+            uint256 returnAmount = args.amountInMaximum - amountIn;
+            if (args.tokenIn == wethAddress) {
+                IWETH9(wethAddress).withdraw(returnAmount);
+                TransferHelper.safeTransferETH(msg.sender, returnAmount);
+            } else {
+                TransferHelper.safeApprove(
+                    args.tokenIn,
+                    address(swapRouter),
+                    0
+                );
+                TransferHelper.safeTransfer(
+                    args.tokenIn,
+                    msg.sender,
+                    returnAmount
+                );
+            }
+        }
+        sweepToken(args.tokenIn, msg.sender);
+        sweepToken(args.tokenOut, msg.sender);
+        sweepNative(msg.sender);
+    }
+
+    function collectTokens(address[] calldata addrs) external onlyOwner {
+        for (uint256 i = 0; i < addrs.length; i++) {
+            sweepToken(addrs[i], msg.sender);
+        }
+    }
+
+    function collectNative() external onlyOwner {
+        sweepNative(msg.sender);
     }
 
     receive() external payable {}

@@ -11,41 +11,39 @@ import { debugBalance, getDeadline } from "./utils";
   console.log(swap.address);
   // await swap.setOwner(owner.address).then((tx) => tx.wait());
 
-  await debugBalance({ signer, owner, swap }, [tokens.frax, tokens.ku]);
+  const stg = ERC20__factory.connect(tokens.stg, signer);
 
-  const path = solidityPack(
-    ["address", "uint24", "address", "uint24", "address", "uint24", "address"],
-    [
-      "0x853d955aCEf822Db058eb8505911ED77F175b99e",
-      500,
-      "0x6B175474E89094C44Da98b954EedeAC495271d0F",
-      3000,
-      "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-      10000,
-      "0xf34960d9d60be18cC1D5Afc1A6F012A723a28811",
-    ]
-  );
-
-  const frax = ERC20__factory.connect(tokens.frax, signer);
-
-  await frax
+  await stg
     .approve(swap.address, ethers.constants.MaxUint256)
     .then((tx) => tx.wait());
 
-  const amountIn = parseEther("100");
-  const tx = await swap.swapExactOutputMultihop({
+  await debugBalance({ signer, owner, swap }, [tokens.weth, tokens.stg], true);
+
+  const path = solidityPack(
+    ["address", "uint24", "address", "uint24", "address"],
+    [
+      "0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6",
+      10000,
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      500,
+      "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    ]
+  );
+
+  const amountIn = parseEther("7000");
+  const tx = await swap.swapExactInputMultihop({
     deadline: getDeadline(),
     path,
-    tokenIn: tokens.frax,
-    tokenOut: tokens.ku,
-    amountInMaximum: amountIn,
-    amountOut: parseEther("1"),
+    tokenIn: tokens.stg,
+    tokenOut: tokens.weth,
+    amountIn,
+    amountOutMinimum: 0,
     owner: owner.address,
     ownerFee: 10000,
   });
   console.log(tx.hash);
   await tx.wait();
 
-  await debugBalance({ signer, owner, swap }, [tokens.frax, tokens.ku]);
+  await debugBalance({ signer, owner, swap }, [tokens.weth, tokens.stg], true);
   process.exit(0);
 })();

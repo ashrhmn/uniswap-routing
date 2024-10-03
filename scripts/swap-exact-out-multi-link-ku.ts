@@ -11,24 +11,16 @@ import { debugBalance, getDeadline } from "./utils";
   console.log(swap.address);
   // await swap.setOwner(owner.address).then((tx) => tx.wait());
 
-  await debugBalance({ signer, owner, swap }, [tokens.frax, tokens.ku]);
+  await debugBalance({ signer, owner, swap }, [tokens.link, tokens.ku]);
 
   const path = solidityPack(
-    ["address", "uint24", "address", "uint24", "address", "uint24", "address"],
-    [
-      "0x853d955aCEf822Db058eb8505911ED77F175b99e",
-      500,
-      "0x6B175474E89094C44Da98b954EedeAC495271d0F",
-      3000,
-      "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-      10000,
-      "0xf34960d9d60be18cC1D5Afc1A6F012A723a28811",
-    ]
+    ["address", "uint24", "address", "uint24", "address"],
+    [tokens.link, 3000, tokens.weth, 10000, tokens.ku]
   );
 
-  const frax = ERC20__factory.connect(tokens.frax, signer);
+  const link = ERC20__factory.connect(tokens.link, signer);
 
-  await frax
+  await link
     .approve(swap.address, ethers.constants.MaxUint256)
     .then((tx) => tx.wait());
 
@@ -36,7 +28,7 @@ import { debugBalance, getDeadline } from "./utils";
   const tx = await swap.swapExactOutputMultihop({
     deadline: getDeadline(),
     path,
-    tokenIn: tokens.frax,
+    tokenIn: tokens.link,
     tokenOut: tokens.ku,
     amountInMaximum: amountIn,
     amountOut: parseEther("1"),
@@ -46,6 +38,6 @@ import { debugBalance, getDeadline } from "./utils";
   console.log(tx.hash);
   await tx.wait();
 
-  await debugBalance({ signer, owner, swap }, [tokens.frax, tokens.ku]);
+  await debugBalance({ signer, owner, swap }, [tokens.link, tokens.ku]);
   process.exit(0);
 })();

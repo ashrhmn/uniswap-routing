@@ -14,14 +14,14 @@ import {
 
   const params: IQuoterV2.QuoteExactInputSingleParamsStruct = {
     fee: 10000,
-    tokenIn: tokens.weth,
-    tokenOut: tokens.ku,
-    amountIn: parseEther("1"),
+    tokenIn: tokens.usdc,
+    tokenOut: tokens.dai,
+    amountIn: parseUnits("10", 6),
     sqrtPriceLimitX96: 0,
   };
   const outAmountSingle = await quoter.callStatic
     .quoteExactInputSingle(params)
-    .then(({ amountOut }) => formatUnits(amountOut, 6));
+    .then(({ amountOut }) => formatUnits(amountOut, 18));
 
   console.log("Exact Input Single : ", outAmountSingle);
 
