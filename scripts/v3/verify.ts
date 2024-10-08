@@ -1,5 +1,5 @@
 import * as hre from "hardhat";
-import { swapRouter, tokens } from "./addresses";
+import { swapRouter, tokens } from "../addresses";
 
 hre
   .run("verify:verify", {

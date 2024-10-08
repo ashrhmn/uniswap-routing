@@ -1,13 +1,12 @@
-import { ethers } from "hardhat";
-import { IQuoterV2, IQuoterV2__factory } from "../typechain-types";
-import { quoterAddress, tokens } from "./addresses";
 import {
   formatEther,
   formatUnits,
-  parseEther,
   parseUnits,
   solidityPack,
 } from "ethers/lib/utils";
+import { ethers } from "hardhat";
+import { IQuoterV2, IQuoterV2__factory } from "../../typechain-types";
+import { quoterAddress, tokens } from "../addresses";
 
 (async () => {
   const quoter = IQuoterV2__factory.connect(quoterAddress, ethers.provider);

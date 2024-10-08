@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
-import { ERC20__factory } from "../typechain-types";
+import { ERC20__factory } from "../../typechain-types";
 import { formatUnits } from "ethers/lib/utils";
-import { tokens } from "./addresses";
+import { tokens } from "../addresses";
 
 const tokenAddress = tokens.usdc;
 

@@ -1,8 +1,8 @@
 import { parseEther, solidityPack } from "ethers/lib/utils";
 import { ethers } from "hardhat";
-import { ERC20__factory, Swap__factory } from "../typechain-types";
-import { swapRouter, tokens } from "./addresses";
-import { debugBalance, getDeadline } from "./utils";
+import { ERC20__factory, Swap__factory } from "../../typechain-types";
+import { swapRouter, tokens } from "../addresses";
+import { debugBalance, getDeadline } from "../utils";
 
 (async () => {
   const [signer, owner] = await ethers.getSigners();

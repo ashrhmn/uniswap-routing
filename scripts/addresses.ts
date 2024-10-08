@@ -28,7 +28,9 @@ export const tokens = {
   stg,
   frax,
   mkr,
+  wise: "0x66a0f676479Cee1d7373f3DC2e2952778BfF5bd6",
 };
 
 export const swapRouter = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
+export const swapRouterV2 = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 export const quoterAddress = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e";
