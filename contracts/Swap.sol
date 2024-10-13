@@ -11,13 +11,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract Swap is Ownable, ReentrancyGuard {
-    ISwapRouter public immutable swapRouterV3;
+    ISwapRouter public swapRouterV3;
 
     IUniswapV2Router02 public swapRouterV2;
 
     uint256 public constant FEE_DENOMINATOR = 1e6; // 10000 = 1%, 100000 = 10%, 1000000 = 100%
 
-    address public immutable wethAddress;
+    address public wethAddress;
     //////////////// V3 Structs Start//////////////////////
     struct ExactInputSingleV3Params {
         address tokenIn;
@@ -122,8 +122,23 @@ contract Swap is Ownable, ReentrancyGuard {
 
     ///////////// v2 Structs End/////////////////////////////////////
 
-    constructor(ISwapRouter _swapRouterV3, address _wethAddress) {
-        swapRouterV3 = _swapRouterV3;
+    constructor(
+        address _swapRouterV3,
+        address _swapRouterV2,
+        address _wethAddress
+    ) {
+        swapRouterV3 = ISwapRouter(_swapRouterV3);
+        swapRouterV2 = IUniswapV2Router02(_swapRouterV2);
+        wethAddress = _wethAddress;
+    }
+
+    function setAddresses(
+        address _swapRouterV3,
+        address _swapRouterV2,
+        address _wethAddress
+    ) external onlyOwner {
+        swapRouterV3 = ISwapRouter(_swapRouterV3);
+        swapRouterV2 = IUniswapV2Router02(_swapRouterV2);
         wethAddress = _wethAddress;
     }
 
