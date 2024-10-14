@@ -1,7 +1,7 @@
 import { Wallet } from "ethers";
 import { ethers } from "hardhat";
-import { debugBalance } from "../utils";
-import { tokens } from "../addresses";
+import { debugBalance } from "./utils";
+import { tokens } from "./addresses";
 
 (async () => {
   // const wallet = new Wallet("private......");

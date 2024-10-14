@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
-import { Swap__factory } from "../../typechain-types";
-import { swapRouter, swapRouterV2, tokens } from "../addresses";
+import { Swap__factory } from "../typechain-types";
+import { swapRouter, swapRouterV2, tokens } from "./addresses";
 
 (async () => {
   const [signer] = await ethers.getSigners();
