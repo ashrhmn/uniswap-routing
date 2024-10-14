@@ -184,19 +184,22 @@ contract Swap is Ownable, ReentrancyGuard {
     uint256 ownerFee
   ) internal {
     if (tokenIn == wethAddress) {
-      uint256 ownerAmount = ownerAmountFromUserAmount(amountIn, ownerFee);
-      require(msg.value == amountIn + ownerAmount, "IV");
-      TransferHelper.safeTransferETH(owner, ownerAmount);
-      IWETH9(wethAddress).deposit{value: amountIn}();
-    } else
-      TransferHelper.safeTransferFrom(
+      // if from token is eth
+      uint256 ownerAmount = ownerAmountFromUserAmount(amountIn, ownerFee); // calculate owner amount from amountIn
+      require(msg.value == amountIn + ownerAmount, "IV"); // owner amount+swapAmount must be already sent as native
+      TransferHelper.safeTransferETH(owner, ownerAmount); // transfer owner portion to owner
+      IWETH9(wethAddress).deposit{value: amountIn}(); // convert swap amount eth to weth
+    }
+    // if from token is erc20
+    else
+      TransferHelper.safeTransferFrom( // transfer swap amount to this contract, assuming user already approved the token
         tokenIn,
         msg.sender,
         address(this),
         amountIn
       );
 
-    TransferHelper.safeApprove(tokenIn, address(swapRouterV3), amountIn);
+    TransferHelper.safeApprove(tokenIn, address(swapRouterV3), amountIn); // approve swap router to take the from token from this contract
   }
 
   function handleOutputOfExactInputV3(
@@ -207,25 +210,31 @@ contract Swap is Ownable, ReentrancyGuard {
     uint256 ownerFee
   ) internal {
     if (tokenIn != wethAddress) {
-      uint256 ownerAmount = ownerAmountFromTotalAmount(amountOut, ownerFee);
+      // if from token is erc20
+      uint256 ownerAmount = ownerAmountFromTotalAmount(amountOut, ownerFee); // calculate owner amount
       if (tokenOut == wethAddress) {
-        IWETH9(wethAddress).withdraw(amountOut);
-        TransferHelper.safeTransferETH(owner, ownerAmount);
-        TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount);
+        // if to token is eth
+        IWETH9(wethAddress).withdraw(amountOut); // convert all weth to eth
+        TransferHelper.safeTransferETH(owner, ownerAmount); // transfer owner portion eth to owner
+        TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount); // transfer rest of the eth to user
       } else {
-        TransferHelper.safeTransfer(tokenOut, owner, ownerAmount);
-        TransferHelper.safeTransfer(
+        // if to token is erc20
+        TransferHelper.safeTransfer(tokenOut, owner, ownerAmount); // transfer owner portion erc20 to owner
+        TransferHelper.safeTransfer( // transfer rest of the erc20 to user
           tokenOut,
           msg.sender,
           amountOut - ownerAmount
         );
       }
     } else {
+      // if from token is eth (considering owner ammount was taken before swap, so no dividents)
       if (tokenOut == wethAddress) {
-        IWETH9(wethAddress).withdraw(amountOut);
-        TransferHelper.safeTransferETH(msg.sender, amountOut);
+        // if to token is eth, possibly will never be true but still
+        IWETH9(wethAddress).withdraw(amountOut); // convert all weth to eth
+        TransferHelper.safeTransferETH(msg.sender, amountOut); // transfer full eth to user
       } else {
-        TransferHelper.safeTransfer(tokenOut, msg.sender, amountOut);
+        // if to token is erc20
+        TransferHelper.safeTransfer(tokenOut, msg.sender, amountOut); // transfer total amount of erc20 to user
       }
     }
   }
@@ -237,22 +246,25 @@ contract Swap is Ownable, ReentrancyGuard {
     uint256 ownerFee
   ) internal {
     if (tokenIn == wethAddress) {
-      uint256 ownerAmount = ownerAmountFromUserAmount(
+      // if from token is eth
+      uint256 ownerAmount = ownerAmountFromUserAmount( // calculate owner amount from swapIn amount
         amountInMaximum,
         ownerFee
       );
-      require(msg.value == amountInMaximum + ownerAmount, "IV");
-      TransferHelper.safeTransferETH(owner, ownerAmount);
-      IWETH9(wethAddress).deposit{value: amountInMaximum}();
-    } else
-      TransferHelper.safeTransferFrom(
+      require(msg.value == amountInMaximum + ownerAmount, "IV"); // swapIn + ownerAmount must be already sent as native value
+      TransferHelper.safeTransferETH(owner, ownerAmount); // transfer owner portion eth to owner
+      IWETH9(wethAddress).deposit{value: amountInMaximum}(); // convert rest of the eth to weth
+    }
+    // if from token is erc20
+    else
+      TransferHelper.safeTransferFrom( // transfer swapIn amount to this contract, assuming user already approved the token
         tokenIn,
         msg.sender,
         address(this),
         amountInMaximum
       );
 
-    TransferHelper.safeApprove(tokenIn, address(swapRouterV3), amountInMaximum);
+    TransferHelper.safeApprove(tokenIn, address(swapRouterV3), amountInMaximum); // approve swap router to take the from token from this contract
   }
 
   function handleOutputOfExactOutputV3(
@@ -462,7 +474,7 @@ contract Swap is Ownable, ReentrancyGuard {
   //////////////// V2 Swap Functions Start ////////////////////////////////////
   function swapExactTokensForTokensV2(
     SwapExactTokensForTokensV2Params calldata args
-  ) external returns (uint[] memory amounts) {
+  ) external nonReentrant returns (uint[] memory amounts) {
     address tokenIn = args.path[0];
     address tokenOut = args.path[args.path.length - 1];
     require(tokenIn != tokenOut, "IT");
@@ -492,7 +504,7 @@ contract Swap is Ownable, ReentrancyGuard {
 
   function swapTokensForExactTokensV2(
     SwapTokensForExactTokensV2Params calldata args
-  ) external returns (uint[] memory amounts) {
+  ) external nonReentrant returns (uint[] memory amounts) {
     address tokenIn = args.path[0];
     address tokenOut = args.path[args.path.length - 1];
     require(tokenIn != tokenOut, "IT");
@@ -538,7 +550,7 @@ contract Swap is Ownable, ReentrancyGuard {
 
   function swapExactETHForTokensV2(
     SwapExactETHForTokensV2Params calldata args
-  ) external payable returns (uint[] memory amounts) {
+  ) external payable nonReentrant returns (uint[] memory amounts) {
     address tokenOut = args.path[args.path.length - 1];
     uint256 ownerAmount = ownerAmountFromTotalAmount(msg.value, args.ownerFee);
     TransferHelper.safeTransferETH(args.owner, ownerAmount);
@@ -552,7 +564,7 @@ contract Swap is Ownable, ReentrancyGuard {
 
   function swapTokensForExactETHV2(
     SwapTokensForExactETHV2Params calldata args
-  ) external returns (uint[] memory amounts) {
+  ) external nonReentrant returns (uint[] memory amounts) {
     address tokenIn = args.path[0];
     TransferHelper.safeTransferFrom(
       tokenIn,
@@ -591,7 +603,7 @@ contract Swap is Ownable, ReentrancyGuard {
 
   function swapExactTokensForETHV2(
     SwapExactTokensForETHV2Params calldata args
-  ) external returns (uint[] memory amounts) {
+  ) external nonReentrant returns (uint[] memory amounts) {
     address tokenIn = args.path[0];
     TransferHelper.safeTransferFrom(
       tokenIn,
@@ -620,7 +632,7 @@ contract Swap is Ownable, ReentrancyGuard {
 
   function swapETHForExactTokensV2(
     SwapETHForExactTokensV2Params calldata args
-  ) external payable returns (uint[] memory amounts) {
+  ) external payable nonReentrant returns (uint[] memory amounts) {
     address tokenOut = args.path[args.path.length - 1];
     uint256 ownerAmount = ownerAmountFromTotalAmount(msg.value, args.ownerFee);
     TransferHelper.safeTransferETH(args.owner, ownerAmount);
