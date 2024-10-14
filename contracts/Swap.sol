@@ -160,25 +160,152 @@ contract Swap is Ownable, ReentrancyGuard {
   /////////////////////////////////////////////////////////////////
 
   ///////////////// V3 Swap Functions ///////////////////////////
+  function handleInputOfExactInputV3(
+    address tokenIn,
+    uint256 amountIn,
+    address owner,
+    uint256 ownerFee
+  ) internal {
+    if (tokenIn == wethAddress) {
+      uint256 ownerAmount = (amountIn * FEE_DENOMINATOR) / ownerFee;
+      require(msg.value == amountIn + ownerAmount, "IV");
+      TransferHelper.safeTransferETH(owner, ownerAmount);
+      IWETH9(wethAddress).deposit{value: amountIn}();
+    } else
+      TransferHelper.safeTransferFrom(
+        tokenIn,
+        msg.sender,
+        address(this),
+        amountIn
+      );
+
+    TransferHelper.safeApprove(tokenIn, address(swapRouterV3), amountIn);
+  }
+
+  function handleOutputOfExactInputV3(
+    address tokenIn,
+    address tokenOut,
+    uint256 amountOut,
+    address owner,
+    uint256 ownerFee
+  ) internal {
+    if (tokenIn != wethAddress) {
+      uint256 ownerAmount = (amountOut * ownerFee) / FEE_DENOMINATOR;
+      if (tokenOut == wethAddress) {
+        IWETH9(wethAddress).withdraw(amountOut);
+        TransferHelper.safeTransferETH(owner, ownerAmount);
+        TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount);
+      } else {
+        TransferHelper.safeTransfer(tokenOut, owner, ownerAmount);
+        TransferHelper.safeTransfer(
+          tokenOut,
+          msg.sender,
+          amountOut - ownerAmount
+        );
+      }
+    } else {
+      if (tokenOut == wethAddress) {
+        IWETH9(wethAddress).withdraw(amountOut);
+        TransferHelper.safeTransferETH(msg.sender, amountOut);
+      } else {
+        TransferHelper.safeTransfer(tokenOut, msg.sender, amountOut);
+      }
+    }
+  }
+
+  function handleInputOfExactOutputV3(
+    address tokenIn,
+    uint256 amountInMaximum,
+    address owner,
+    uint256 ownerFee
+  ) internal {
+    if (tokenIn == wethAddress) {
+      uint256 ownerAmount = (amountInMaximum * FEE_DENOMINATOR) / ownerFee;
+      require(msg.value == amountInMaximum + ownerAmount, "IV");
+      TransferHelper.safeTransferETH(owner, ownerAmount);
+      IWETH9(wethAddress).deposit{value: amountInMaximum}();
+    } else
+      TransferHelper.safeTransferFrom(
+        tokenIn,
+        msg.sender,
+        address(this),
+        amountInMaximum
+      );
+
+    TransferHelper.safeApprove(tokenIn, address(swapRouterV3), amountInMaximum);
+  }
+
+  function handleOutputOfExactOutputV3(
+    address tokenIn,
+    address tokenOut,
+    uint256 amountInMaximum,
+    uint256 amountIn,
+    uint256 amountOut,
+    address owner,
+    uint256 ownerFee
+  ) internal {
+    if (tokenIn != wethAddress) {
+      uint256 ownerAmount = (amountOut * ownerFee) / FEE_DENOMINATOR;
+      if (tokenOut == wethAddress) {
+        IWETH9(wethAddress).withdraw(amountOut);
+        TransferHelper.safeTransferETH(owner, ownerAmount);
+        TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount);
+      } else {
+        TransferHelper.safeTransfer(tokenOut, owner, ownerAmount);
+        TransferHelper.safeTransfer(
+          tokenOut,
+          msg.sender,
+          amountOut - ownerAmount
+        );
+      }
+    } else {
+      if (tokenOut == wethAddress) {
+        IWETH9(wethAddress).withdraw(amountOut);
+        TransferHelper.safeTransferETH(msg.sender, amountOut);
+      } else {
+        TransferHelper.safeTransfer(tokenOut, msg.sender, amountOut);
+      }
+    }
+
+    if (amountIn < amountInMaximum) {
+      uint256 returnAmount = amountInMaximum - amountIn;
+      if (tokenIn == wethAddress) {
+        IWETH9(wethAddress).withdraw(returnAmount);
+        TransferHelper.safeTransferETH(msg.sender, returnAmount);
+      } else {
+        TransferHelper.safeApprove(tokenIn, address(swapRouterV3), 0);
+        TransferHelper.safeTransfer(tokenIn, msg.sender, returnAmount);
+      }
+    }
+  }
+
   function swapExactInputSingle(
     ExactInputSingleV3Params calldata args
   ) external payable nonReentrant returns (uint256 amountOut) {
-    if (args.tokenIn == wethAddress) {
-      require(msg.value == args.amountIn, "IV");
-      IWETH9(wethAddress).deposit{value: args.amountIn}();
-    } else
-      TransferHelper.safeTransferFrom(
-        args.tokenIn,
-        msg.sender,
-        address(this),
-        args.amountIn
-      );
-
-    TransferHelper.safeApprove(
+    handleInputOfExactInputV3(
       args.tokenIn,
-      address(swapRouterV3),
-      args.amountIn
+      args.amountIn,
+      args.owner,
+      args.ownerFee
     );
+    // if (args.tokenIn == wethAddress) {
+    //   uint256 ownerAmount = (args.amountIn * FEE_DENOMINATOR) / args.ownerFee;
+    //   require(msg.value == args.amountIn + ownerAmount, "IV");
+    //   TransferHelper.safeTransferETH(args.owner, ownerAmount);
+    //   IWETH9(wethAddress).deposit{value: args.amountIn}();
+    // } else
+    //   TransferHelper.safeTransferFrom(
+    //     args.tokenIn,
+    //     msg.sender,
+    //     address(this),
+    //     args.amountIn
+    //   );
+
+    // TransferHelper.safeApprove(
+    //   args.tokenIn,
+    //   address(swapRouterV3),
+    //   args.amountIn
+    // );
 
     ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
       .ExactInputSingleParams({
@@ -193,19 +320,36 @@ contract Swap is Ownable, ReentrancyGuard {
       });
 
     amountOut = swapRouterV3.exactInputSingle(params);
-    uint256 ownerAmount = (amountOut * args.ownerFee) / FEE_DENOMINATOR;
-    if (args.tokenOut == wethAddress) {
-      IWETH9(wethAddress).withdraw(amountOut);
-      TransferHelper.safeTransferETH(args.owner, ownerAmount);
-      TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount);
-    } else {
-      TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
-      TransferHelper.safeTransfer(
-        args.tokenOut,
-        msg.sender,
-        amountOut - ownerAmount
-      );
-    }
+
+    handleOutputOfExactInputV3(
+      args.tokenIn,
+      args.tokenOut,
+      amountOut,
+      args.owner,
+      args.ownerFee
+    );
+    // if (args.tokenIn != wethAddress) {
+    //   uint256 ownerAmount = (amountOut * args.ownerFee) / FEE_DENOMINATOR;
+    //   if (args.tokenOut == wethAddress) {
+    //     IWETH9(wethAddress).withdraw(amountOut);
+    //     TransferHelper.safeTransferETH(args.owner, ownerAmount);
+    //     TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount);
+    //   } else {
+    //     TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
+    //     TransferHelper.safeTransfer(
+    //       args.tokenOut,
+    //       msg.sender,
+    //       amountOut - ownerAmount
+    //     );
+    //   }
+    // } else {
+    //   if (args.tokenOut == wethAddress) {
+    //     IWETH9(wethAddress).withdraw(amountOut);
+    //     TransferHelper.safeTransferETH(msg.sender, amountOut);
+    //   } else {
+    //     TransferHelper.safeTransfer(args.tokenOut, msg.sender, amountOut);
+    //   }
+    // }
 
     sweepToken(args.tokenIn, msg.sender);
     sweepToken(args.tokenOut, msg.sender);
@@ -215,22 +359,30 @@ contract Swap is Ownable, ReentrancyGuard {
   function swapExactOutputSingle(
     ExactOutputSingleV3Params calldata args
   ) external payable nonReentrant returns (uint256 amountIn) {
-    if (args.tokenIn == wethAddress) {
-      require(msg.value == args.amountInMaximum, "IV");
-      IWETH9(wethAddress).deposit{value: args.amountInMaximum}();
-    } else
-      TransferHelper.safeTransferFrom(
-        args.tokenIn,
-        msg.sender,
-        address(this),
-        args.amountInMaximum
-      );
-
-    TransferHelper.safeApprove(
+    handleInputOfExactOutputV3(
       args.tokenIn,
-      address(swapRouterV3),
-      args.amountInMaximum
+      args.amountInMaximum,
+      args.owner,
+      args.ownerFee
     );
+    // if (args.tokenIn == wethAddress) {
+    //   uint256 ownerAmount = (args.amountInMaximum * FEE_DENOMINATOR) /
+    //     args.ownerFee;
+    //   require(msg.value == args.amountInMaximum + ownerAmount, "IV");
+    //   TransferHelper.safeTransferETH(args.owner, ownerAmount);
+    //   IWETH9(wethAddress).deposit{value: args.amountInMaximum}();
+    // } else
+    //   TransferHelper.safeTransferFrom(
+    //     args.tokenIn,
+    //     msg.sender,
+    //     address(this),
+    //     args.amountInMaximum
+    //   );
+    // TransferHelper.safeApprove(
+    //   args.tokenIn,
+    //   address(swapRouterV3),
+    //   args.amountInMaximum
+    // );
 
     ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter
       .ExactOutputSingleParams({
@@ -246,30 +398,52 @@ contract Swap is Ownable, ReentrancyGuard {
 
     amountIn = swapRouterV3.exactOutputSingle(params);
 
-    uint256 ownerAmount = (args.amountOut * args.ownerFee) / FEE_DENOMINATOR;
-    if (args.tokenOut == wethAddress) {
-      IWETH9(wethAddress).withdraw(args.amountOut);
-      TransferHelper.safeTransferETH(args.owner, ownerAmount);
-      TransferHelper.safeTransferETH(msg.sender, args.amountOut - ownerAmount);
-    } else {
-      TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
-      TransferHelper.safeTransfer(
-        args.tokenOut,
-        msg.sender,
-        args.amountOut - ownerAmount
-      );
-    }
+    handleOutputOfExactOutputV3(
+      args.tokenIn,
+      args.tokenOut,
+      args.amountInMaximum,
+      amountIn,
+      args.amountOut,
+      args.owner,
+      args.ownerFee
+    );
 
-    if (amountIn < args.amountInMaximum) {
-      uint256 returnAmount = args.amountInMaximum - amountIn;
-      if (args.tokenIn == wethAddress) {
-        IWETH9(wethAddress).withdraw(returnAmount);
-        TransferHelper.safeTransferETH(msg.sender, returnAmount);
-      } else {
-        TransferHelper.safeApprove(args.tokenIn, address(swapRouterV3), 0);
-        TransferHelper.safeTransfer(args.tokenIn, msg.sender, returnAmount);
-      }
-    }
+    // if (args.tokenIn != wethAddress) {
+    //   uint256 ownerAmount = (args.amountOut * args.ownerFee) / FEE_DENOMINATOR;
+    //   if (args.tokenOut == wethAddress) {
+    //     IWETH9(wethAddress).withdraw(args.amountOut);
+    //     TransferHelper.safeTransferETH(args.owner, ownerAmount);
+    //     TransferHelper.safeTransferETH(
+    //       msg.sender,
+    //       args.amountOut - ownerAmount
+    //     );
+    //   } else {
+    //     TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
+    //     TransferHelper.safeTransfer(
+    //       args.tokenOut,
+    //       msg.sender,
+    //       args.amountOut - ownerAmount
+    //     );
+    //   }
+    // } else {
+    //   if (args.tokenOut == wethAddress) {
+    //     IWETH9(wethAddress).withdraw(args.amountOut);
+    //     TransferHelper.safeTransferETH(msg.sender, args.amountOut);
+    //   } else {
+    //     TransferHelper.safeTransfer(args.tokenOut, msg.sender, args.amountOut);
+    //   }
+    // }
+
+    // if (amountIn < args.amountInMaximum) {
+    //   uint256 returnAmount = args.amountInMaximum - amountIn;
+    //   if (args.tokenIn == wethAddress) {
+    //     IWETH9(wethAddress).withdraw(returnAmount);
+    //     TransferHelper.safeTransferETH(msg.sender, returnAmount);
+    //   } else {
+    //     TransferHelper.safeApprove(args.tokenIn, address(swapRouterV3), 0);
+    //     TransferHelper.safeTransfer(args.tokenIn, msg.sender, returnAmount);
+    //   }
+    // }
 
     sweepToken(args.tokenIn, msg.sender);
     sweepToken(args.tokenOut, msg.sender);
@@ -279,22 +453,30 @@ contract Swap is Ownable, ReentrancyGuard {
   function swapExactInputMultihop(
     ExactInputMultiV3Params calldata args
   ) external payable nonReentrant returns (uint256 amountOut) {
-    if (args.tokenIn == wethAddress) {
-      require(msg.value == args.amountIn, "IV");
-      IWETH9(wethAddress).deposit{value: args.amountIn}();
-    } else
-      TransferHelper.safeTransferFrom(
-        args.tokenIn,
-        msg.sender,
-        address(this),
-        args.amountIn
-      );
-
-    TransferHelper.safeApprove(
+    handleInputOfExactInputV3(
       args.tokenIn,
-      address(swapRouterV3),
-      args.amountIn
+      args.amountIn,
+      args.owner,
+      args.ownerFee
     );
+    // if (args.tokenIn == wethAddress) {
+    //   uint256 ownerAmount = (args.amountIn * FEE_DENOMINATOR) / args.ownerFee;
+    //   require(msg.value == args.amountIn + ownerAmount, "IV");
+    //   TransferHelper.safeTransferETH(args.owner, ownerAmount);
+    //   IWETH9(wethAddress).deposit{value: args.amountIn}();
+    // } else
+    //   TransferHelper.safeTransferFrom(
+    //     args.tokenIn,
+    //     msg.sender,
+    //     address(this),
+    //     args.amountIn
+    //   );
+
+    // TransferHelper.safeApprove(
+    //   args.tokenIn,
+    //   address(swapRouterV3),
+    //   args.amountIn
+    // );
 
     ISwapRouter.ExactInputParams memory params = ISwapRouter.ExactInputParams({
       path: args.path,
@@ -305,19 +487,37 @@ contract Swap is Ownable, ReentrancyGuard {
     });
 
     amountOut = swapRouterV3.exactInput(params);
-    uint256 ownerAmount = (amountOut * args.ownerFee) / FEE_DENOMINATOR;
-    if (args.tokenOut == wethAddress) {
-      IWETH9(wethAddress).withdraw(amountOut);
-      TransferHelper.safeTransferETH(args.owner, ownerAmount);
-      TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount);
-    } else {
-      TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
-      TransferHelper.safeTransfer(
-        args.tokenOut,
-        msg.sender,
-        amountOut - ownerAmount
-      );
-    }
+
+    handleOutputOfExactInputV3(
+      args.tokenIn,
+      args.tokenOut,
+      amountOut,
+      args.owner,
+      args.ownerFee
+    );
+    // if (args.tokenIn != wethAddress) {
+    //   uint256 ownerAmount = (amountOut * args.ownerFee) / FEE_DENOMINATOR;
+    //   if (args.tokenOut == wethAddress) {
+    //     IWETH9(wethAddress).withdraw(amountOut);
+    //     TransferHelper.safeTransferETH(args.owner, ownerAmount);
+    //     TransferHelper.safeTransferETH(msg.sender, amountOut - ownerAmount);
+    //   } else {
+    //     TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
+    //     TransferHelper.safeTransfer(
+    //       args.tokenOut,
+    //       msg.sender,
+    //       amountOut - ownerAmount
+    //     );
+    //   }
+    // } else {
+    //   if (args.tokenOut == wethAddress) {
+    //     IWETH9(wethAddress).withdraw(amountOut);
+    //     TransferHelper.safeTransferETH(msg.sender, amountOut);
+    //   } else {
+    //     TransferHelper.safeTransfer(args.tokenOut, msg.sender, amountOut);
+    //   }
+    // }
+
     sweepToken(args.tokenIn, msg.sender);
     sweepToken(args.tokenOut, msg.sender);
     sweepNative(msg.sender);
@@ -326,21 +526,30 @@ contract Swap is Ownable, ReentrancyGuard {
   function swapExactOutputMultihop(
     ExactOutputMultiV3Params calldata args
   ) external payable nonReentrant returns (uint256 amountIn) {
-    if (args.tokenIn == wethAddress) {
-      require(msg.value == args.amountInMaximum, "IV");
-      IWETH9(wethAddress).deposit{value: args.amountInMaximum}();
-    } else
-      TransferHelper.safeTransferFrom(
-        args.tokenIn,
-        msg.sender,
-        address(this),
-        args.amountInMaximum
-      );
-    TransferHelper.safeApprove(
+    handleInputOfExactOutputV3(
       args.tokenIn,
-      address(swapRouterV3),
-      args.amountInMaximum
+      args.amountInMaximum,
+      args.owner,
+      args.ownerFee
     );
+    // if (args.tokenIn == wethAddress) {
+    //   uint256 ownerAmount = (args.amountInMaximum * FEE_DENOMINATOR) /
+    //     args.ownerFee;
+    //   require(msg.value == args.amountInMaximum + ownerAmount, "IV");
+    //   TransferHelper.safeTransferETH(args.owner, ownerAmount);
+    //   IWETH9(wethAddress).deposit{value: args.amountInMaximum}();
+    // } else
+    //   TransferHelper.safeTransferFrom(
+    //     args.tokenIn,
+    //     msg.sender,
+    //     address(this),
+    //     args.amountInMaximum
+    //   );
+    // TransferHelper.safeApprove(
+    //   args.tokenIn,
+    //   address(swapRouterV3),
+    //   args.amountInMaximum
+    // );
 
     ISwapRouter.ExactOutputParams memory params = ISwapRouter
       .ExactOutputParams({
@@ -353,29 +562,53 @@ contract Swap is Ownable, ReentrancyGuard {
 
     amountIn = swapRouterV3.exactOutput(params);
 
-    uint256 ownerAmount = (args.amountOut * args.ownerFee) / FEE_DENOMINATOR;
-    if (args.tokenOut == wethAddress) {
-      IWETH9(wethAddress).withdraw(args.amountOut);
-      TransferHelper.safeTransferETH(args.owner, ownerAmount);
-      TransferHelper.safeTransferETH(msg.sender, args.amountOut - ownerAmount);
-    } else {
-      TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
-      TransferHelper.safeTransfer(
-        args.tokenOut,
-        msg.sender,
-        args.amountOut - ownerAmount
-      );
-    }
-    if (amountIn < args.amountInMaximum) {
-      uint256 returnAmount = args.amountInMaximum - amountIn;
-      if (args.tokenIn == wethAddress) {
-        IWETH9(wethAddress).withdraw(returnAmount);
-        TransferHelper.safeTransferETH(msg.sender, returnAmount);
-      } else {
-        TransferHelper.safeApprove(args.tokenIn, address(swapRouterV3), 0);
-        TransferHelper.safeTransfer(args.tokenIn, msg.sender, returnAmount);
-      }
-    }
+    handleOutputOfExactOutputV3(
+      args.tokenIn,
+      args.tokenOut,
+      args.amountInMaximum,
+      amountIn,
+      args.amountOut,
+      args.owner,
+      args.ownerFee
+    );
+
+    // if (args.tokenIn != wethAddress) {
+    //   uint256 ownerAmount = (args.amountOut * args.ownerFee) / FEE_DENOMINATOR;
+    //   if (args.tokenOut == wethAddress) {
+    //     IWETH9(wethAddress).withdraw(args.amountOut);
+    //     TransferHelper.safeTransferETH(args.owner, ownerAmount);
+    //     TransferHelper.safeTransferETH(
+    //       msg.sender,
+    //       args.amountOut - ownerAmount
+    //     );
+    //   } else {
+    //     TransferHelper.safeTransfer(args.tokenOut, args.owner, ownerAmount);
+    //     TransferHelper.safeTransfer(
+    //       args.tokenOut,
+    //       msg.sender,
+    //       args.amountOut - ownerAmount
+    //     );
+    //   }
+    // } else {
+    //   if (args.tokenOut == wethAddress) {
+    //     IWETH9(wethAddress).withdraw(args.amountOut);
+    //     TransferHelper.safeTransferETH(msg.sender, args.amountOut);
+    //   } else {
+    //     TransferHelper.safeTransfer(args.tokenOut, msg.sender, args.amountOut);
+    //   }
+    // }
+
+    // if (amountIn < args.amountInMaximum) {
+    //   uint256 returnAmount = args.amountInMaximum - amountIn;
+    //   if (args.tokenIn == wethAddress) {
+    //     IWETH9(wethAddress).withdraw(returnAmount);
+    //     TransferHelper.safeTransferETH(msg.sender, returnAmount);
+    //   } else {
+    //     TransferHelper.safeApprove(args.tokenIn, address(swapRouterV3), 0);
+    //     TransferHelper.safeTransfer(args.tokenIn, msg.sender, returnAmount);
+    //   }
+    // }
+
     sweepToken(args.tokenIn, msg.sender);
     sweepToken(args.tokenOut, msg.sender);
     sweepNative(msg.sender);
@@ -459,18 +692,16 @@ contract Swap is Ownable, ReentrancyGuard {
     SwapExactETHForTokensV2Params calldata args
   ) external payable returns (uint[] memory amounts) {
     address tokenOut = args.path[args.path.length - 1];
-    amounts = swapRouterV2.swapExactETHForTokens{value: msg.value}(
-      args.amountOutMin,
-      args.path,
-      address(this),
-      args.deadline
-    );
+    uint256 ownerAmount = (msg.value * args.ownerFee) / FEE_DENOMINATOR;
+    TransferHelper.safeTransferETH(args.owner, ownerAmount);
+    amounts = swapRouterV2.swapExactETHForTokens{
+      value: msg.value - ownerAmount
+    }(args.amountOutMin, args.path, address(this), args.deadline);
     require(amounts.length == args.path.length, "IS");
     uint256 amountOut = amounts[amounts.length - 1];
-    uint256 ownerAmount = (amountOut * args.ownerFee) / FEE_DENOMINATOR;
 
-    TransferHelper.safeTransfer(tokenOut, args.owner, ownerAmount);
-    TransferHelper.safeTransfer(tokenOut, msg.sender, amountOut - ownerAmount);
+    TransferHelper.safeTransfer(tokenOut, msg.sender, amountOut);
+
     sweepToken(tokenOut, msg.sender);
     sweepNative(msg.sender);
   }
@@ -544,32 +775,28 @@ contract Swap is Ownable, ReentrancyGuard {
     SwapETHForExactTokensV2Params calldata args
   ) external payable returns (uint[] memory amounts) {
     address tokenOut = args.path[args.path.length - 1];
-    amounts = swapRouterV2.swapETHForExactTokens{value: msg.value}(
-      args.amountOut,
-      args.path,
-      address(this),
-      args.deadline
-    );
+    uint256 ownerAmount = (msg.value * args.ownerFee) / FEE_DENOMINATOR;
+    TransferHelper.safeTransferETH(args.owner, ownerAmount);
+    amounts = swapRouterV2.swapETHForExactTokens{
+      value: msg.value - ownerAmount
+    }(args.amountOut, args.path, address(this), args.deadline);
     require(amounts.length == args.path.length, "IS");
     uint256 amountIn = amounts[amounts.length - 1];
-    uint256 ownerAmount = (args.amountOut * args.ownerFee) / FEE_DENOMINATOR;
-    TransferHelper.safeTransfer(tokenOut, args.owner, ownerAmount);
-    TransferHelper.safeTransfer(
-      tokenOut,
-      msg.sender,
-      args.amountOut - ownerAmount
-    );
-    if (amountIn < msg.value)
-      TransferHelper.safeTransferETH(msg.sender, msg.value - amountIn);
+    TransferHelper.safeTransfer(tokenOut, msg.sender, args.amountOut);
+    if (amountIn < msg.value - ownerAmount)
+      TransferHelper.safeTransferETH(
+        msg.sender,
+        msg.value - ownerAmount - amountIn
+      );
     sweepToken(tokenOut, msg.sender);
     sweepNative(msg.sender);
   }
 
   ///////////////  V2 Swap Functions End //////////////////////////////////////
   ///////// Function for collecting accidentally sent tokens to the contract///////
-  function collectTokens(address[] calldata addrs) external onlyOwner {
-    for (uint256 i = 0; i < addrs.length; i++) {
-      sweepToken(addrs[i], msg.sender);
+  function collectTokens(address[] calldata _addresses) external onlyOwner {
+    for (uint256 i = 0; i < _addresses.length; i++) {
+      sweepToken(_addresses[i], msg.sender);
     }
   }
 
