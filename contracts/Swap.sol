@@ -583,16 +583,17 @@ contract Swap is Ownable, ReentrancyGuard {
     address tokenOut = args.path[args.path.length - 1];
     uint256 ownerAmount = (msg.value * args.ownerFee) / FEE_DENOMINATOR;
     TransferHelper.safeTransferETH(args.owner, ownerAmount);
-    amounts = swapRouterV2.swapETHForExactTokens{
-      value: msg.value - ownerAmount
-    }(args.amountOut, args.path, msg.sender, args.deadline);
+    uint256 swapinAmount = msg.value - ownerAmount;
+    amounts = swapRouterV2.swapETHForExactTokens{value: swapinAmount}(
+      args.amountOut,
+      args.path,
+      msg.sender,
+      args.deadline
+    );
     require(amounts.length == args.path.length, "IS");
     uint256 amountIn = amounts[amounts.length - 1];
-    if (amountIn < msg.value - ownerAmount)
-      TransferHelper.safeTransferETH(
-        msg.sender,
-        msg.value - ownerAmount - amountIn
-      );
+    if (amountIn < swapinAmount)
+      TransferHelper.safeTransferETH(msg.sender, swapinAmount - amountIn);
     sweepToken(tokenOut, msg.sender);
     sweepNative(msg.sender);
   }
