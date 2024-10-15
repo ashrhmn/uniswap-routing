@@ -161,7 +161,7 @@ contract Swap is Ownable, ReentrancyGuard {
 
   ///////////////// V3 Swap Functions ///////////////////////////
 
-  function ownerAmountFromUserAmount(
+  function ownerAmountFromSwapInAmount(
     uint256 userAmount, // 99%
     uint256 ownerFee // 1%
   ) internal pure returns (uint256 ownerAmount) {
@@ -185,7 +185,7 @@ contract Swap is Ownable, ReentrancyGuard {
   ) internal {
     if (tokenIn == wethAddress) {
       // if from token is eth
-      uint256 ownerAmount = ownerAmountFromUserAmount(amountIn, ownerFee); // calculate owner amount from amountIn
+      uint256 ownerAmount = ownerAmountFromSwapInAmount(amountIn, ownerFee); // calculate owner amount from amountIn
       require(msg.value == amountIn + ownerAmount, "IV"); // owner amount+swapAmount must be already sent as native
       TransferHelper.safeTransferETH(owner, ownerAmount); // transfer owner portion to owner
       IWETH9(wethAddress).deposit{value: amountIn}(); // convert swap amount eth to weth
@@ -247,7 +247,7 @@ contract Swap is Ownable, ReentrancyGuard {
   ) internal {
     if (tokenIn == wethAddress) {
       // if from token is eth
-      uint256 ownerAmount = ownerAmountFromUserAmount( // calculate owner amount from swapIn amount
+      uint256 ownerAmount = ownerAmountFromSwapInAmount( // calculate owner amount from swapIn amount
         amountInMaximum,
         ownerFee
       );
